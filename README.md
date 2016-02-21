@@ -1,0 +1,64 @@
+# Consul Crontab
+
+Consul Crontab is a very simple distributed periodic job scheduler, built on
+[cron](https://en.wikipedia.org/wiki/Cron) and [consul](https://consul.io/).
+
+## Problem Statement
+
+Consul Crontab aims to solve a problem of:
+
+ - I want to run a task periodically
+ - My task may run on any one of a set of boxes
+ - I want my task to run, even if some of those boxes are down.
+ - I do not want my task to run more than once for a given period.
+
+Consul Crontab does not currently attempt to solve any of the following problems:
+
+ - My task should be retried if it fails.
+ - My task is resource-intensive and needs to be scheduled on a box that has
+   enough resources to spare.
+ - I would like to run a task continuously.
+
+## Usage
+
+`Consul Crontab` is intended to be run by your cron daemon. You should schedule the
+same tab command on multiple boxes, at the same time. `tab` will
+attempt to grab a lock, and will exit silently if it fails to grab this lock;
+this ensures that only one box will run the command specified for a particular
+period.
+
+A typical cronjob entry might look like this:
+
+```
+0 * * * *   root    tab cleanup_logs /usr/local/bin/cleanup_logs.sh
+```
+
+The `tab` script itself takes one or two arguments, in addition to a command:
+
+1. A task id. This is used to associate multiple `tab` runs from different
+boxes.
+2. Optionally, using `--period`, the length of the period (in seconds) during
+which you don't want your command to be run twice. This defaults to 60, which
+should generally be enough, but if your cron job might be started in different
+minutes on different boxes (e.g. due to different cron jobs or an overloaded
+box), you may increase this up to the frequency at which your job runs.
+
+The current Unix time is rounded down to the next lowest multiple of period,
+and this value is used to calculate the key where `tab`'s lock lives, so a
+lock created at 17:54 with a period of 3600 will expire at 18:00.
+
+## Dependencies
+
+`Consul Crontab` depends on:
+
+ - bash 3+
+ - curl
+ - A running consul cluster.
+ - some form of cron daemon.
+
+## `tab-cleanup`
+
+Since cronsul leaves things lying around in consul's KV store even after exit,
+a helper script, `tab-cleanup`, is provided to help you clean up after cronsul.
+
+It will delete any lock value that is more than two periods old.
